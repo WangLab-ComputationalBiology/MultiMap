@@ -4,36 +4,74 @@
 #' anchors can later be used to transfer data from the reference to
 #' query object using the \code{\link{TransferData}} object.
 #'
-#' @param reference
-#' @param query
-#' @param batch
-#' @param normalization.method
-#' @param recompute.residuals
-#' @param reference.assay
-#' @param reference.neighbors
-#' @param query.assay
-#' @param reduction
-#' @param reference.reduction
-#' @param project.query
-#' @param features
-#' @param scale
-#' @param npcs
-#' @param l2.norm
-#' @param dims
-#' @param k.anchor
-#' @param k.filter
-#' @param k.score
-#' @param max.features
-#' @param nn.method
-#' @param n.trees
-#' @param eps
-#' @param approx.pca
-#' @param mapping.score.k
-#' @param verbose
+#' @param reference \code{\link{Seurat}} object to use as the reference
+#' @param query \code{\link{Seurat}} object to use as the query
+#' @param batch batch column in meta.data of Seurat object
+#' @param normalization.method Name of normalization method used: LogNormalize
+#' or SCT.
+#' @param recompute.residuals If using SCT as a normalization method, compute
+#' query Pearson residuals using the reference SCT model parameters.
+#' @param reference.assay Name of the Assay to use from reference
+#' @param reference.neighbors Name of the Neighbor to use from the reference.
+#' Optionally enables reuse of precomputed neighbors.
+#' @param query.assay Name of the Assay to use from query
+#' @param reduction Dimensional reduction to perform when finding anchors.
+#' Options are:
+#' \itemize{
+#'    \item{pcaproject: Project the PCA from the reference onto the query. We
+#'    recommend using PCA when reference and query datasets are from scRNA-seq}
+#'    \item{lsiproject: Project the LSI from the reference onto the query. We
+#'    recommend using LSI when reference and query datasets are from scATAC-seq.
+#'    This requires that LSI has been computed for the reference dataset, and the
+#'    same features (eg, peaks or genome bins) are present in both the reference
+#'    and query. See \code{\link[Signac]{RunTFIDF}} and
+#'    \code{\link[Signac]{RunSVD}}}
+#'    \item{rpca: Project the PCA from the reference onto the query, and the PCA
+#'    from the query onto the reference (reciprocal PCA projection).}
+#'    \item{cca: Run a CCA on the reference and query }
+#' }
+#' @param reference.reduction Name of dimensional reduction to use from the
+#' reference if running the pcaproject workflow. Optionally enables reuse of
+#' precomputed reference dimensional reduction. If NULL (default), use a PCA
+#' computed on the reference object.
+#' @param project.query Project the PCA from the query dataset onto the
+#' reference. Use only in rare cases where the query dataset has a much larger
+#' cell number, but the reference dataset has a unique assay for transfer. In
+#' this case, the default features will be set to the variable features of the
+#' query object that are alos present in the reference.
+#' @param features Features to use for dimensional reduction. If not specified,
+#' set as variable features of the reference object which are also present in
+#' the query.
+#' @param scale Scale query data.
+#' @param npcs Number of PCs to compute on reference if reference.reduction is
+#' not provided.
+#' @param l2.norm Perform L2 normalization on the cell embeddings after
+#' dimensional reduction
+#' @param dims Which dimensions to use from the reduction to specify the
+#' neighbor search space
+#' @param k.anchor How many neighbors (k) to use when finding anchors
+#' @param k.filter How many neighbors (k) to use when filtering anchors. Set to
+#' NA to turn off filtering.
+#' @param k.score How many neighbors (k) to use when scoring anchors
+#' @param max.features The maximum number of features to use when specifying the
+#' neighborhood search space in the anchor filtering
+#' @param nn.method Method for nearest neighbor finding. Options include: rann,
+#' annoy
+#' @param n.trees More trees gives higher precision when using annoy approximate
+#' nearest neighbor search
+#' @param eps Error bound on the neighbor finding algorithm (from
+#' \code{\link{RANN}} or \code{\link{RcppAnnoy}})
+#' @param approx.pca Use truncated singular value decomposition to approximate
+#' PCA
+#' @param mapping.score.k Compute and store nearest k query neighbors in the
+#' AnchorSet object that is returned. You can optionally set this if you plan
+#' on computing the mapping score and want to enable reuse of some downstream
+#' neighbor calculations to make the mapping score function more efficient.
+#' @param verbose Print progress bars and output
 #'
-#' @return
+#' @return Returns an \code{AnchorSet} object list.
+#'
 #' @export
-#'
 #' @examples
 FindTransferAnchors_MB <- function(reference,
                                    query,
@@ -100,3 +138,54 @@ FindTransferAnchors_MB <- function(reference,
   }
   return(anchorsL)
 }
+
+
+
+#' Get reference quality score gamma for each batch
+#'
+#' @param anchorsetL an \code{AnchorSet} object list.
+#' @param celltype cell type vector for each cell
+#' @param beta beta parameter
+#' @param alpha alpha parameter
+#'
+#' @return gamma score list
+#' @export
+#'
+#' @examples
+GetRefBatchWeight_MB <- function(anchorsetL,
+                              celltype,
+                              beta = 0.5,
+                              alpha = 0.5){
+    ## cell1 cell2     score
+    ## [1,]     7   766 0.6923077
+    gammaL <- lapply(anchorsetL, GetBatchWeight, celltype, beta, alpha)
+    return(gammaL)
+}
+
+#' Get gamma for a batch
+#'
+#' @param anchorset an \code{AnchorSet} object
+#' @param celltype cell type vector for each cell
+#' @param beta beta parameter
+#' @param alpha alpha parameter
+#'
+#' @return gamma score
+#'
+#' @examples
+GetBatchWeight <- function(anchorset, celltype, beta, alpha){
+    scoreT <- anchorset@anchor
+    K <- length(unique(x = celltype))
+    scoreT$celltype <- celltype[scoreT$cell1]
+    SIC <- scoreT %>%
+        mutate(goodscore = (score > ki) * score) %>%
+        group_by(celltype) %>%
+        summarise(SCS = sum(goodscore)) %>%
+        ungroup %>%
+        mutate(CIC = - SCS / sum(SCS) * log(SCS / sum(SCS))) %>%
+        replace_na(list(CIC = 0)) %>%
+        summarise(IC = sum(CIC) / K,
+                  S = sum(SCS) / K)
+    gamma <- alpha * log(SIC$IC) + (1 - alpha) * log(SIC$S)
+    return(gamma)
+}
+
