@@ -173,11 +173,11 @@ GetRefBatchWeight_MB <- function(anchorsetL,
 #'
 #' @examples
 GetBatchWeight <- function(anchorset, celltype, beta, alpha){
-    scoreT <- anchorset@anchor
+    scoreT <- as.tibble(anchorset@anchors)
     K <- length(unique(x = celltype))
     scoreT$celltype <- celltype[scoreT$cell1]
     SIC <- scoreT %>%
-        mutate(goodscore = (score > ki) * score) %>%
+        mutate(goodscore = (score > beta) * score) %>%
         group_by(celltype) %>%
         summarise(SCS = sum(goodscore)) %>%
         ungroup %>%
