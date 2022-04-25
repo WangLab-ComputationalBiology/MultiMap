@@ -158,8 +158,16 @@ GetRefBatchWeight_MB <- function(anchorsetL,
                               alpha = 0.5){
     ## cell1 cell2     score
     ## [1,]     7   766 0.6923077
-    gammaL <- lapply(anchorsetL, GetBatchWeight, celltype, beta, alpha)
-    return(gammaL)
+    gammaL <- lapply(anchorsetL, GetBatchWeight, celltype, beta)
+    gammaT <- bind_rows(gammaL) %>%
+      mutate(batch = names(gammaL)) %>%
+      mutate(Snorm = S/max(S)) %>%
+      mutate(ICnorm = IC/max(IC)) %>%
+      mutate(Gamma = alpha * log(ICnorm) + (1 - alpha) * log(Snorm)) %>%
+      arrange(desc(Gamma)) %>%
+      select(batch, IC, ICnorm, S, Snorm, Gamma)
+
+    return(gammaT)
 }
 
 #' Get gamma for a batch
@@ -172,20 +180,26 @@ GetRefBatchWeight_MB <- function(anchorsetL,
 #' @return gamma score
 #'
 #' @examples
-GetBatchWeight <- function(anchorset, celltype, beta, alpha){
+GetBatchWeight <- function(anchorset, celltype, beta){
     scoreT <- as.tibble(anchorset@anchors)
     K <- length(unique(x = celltype))
     scoreT$celltype <- celltype[scoreT$cell1]
-    SIC <- scoreT %>%
-        mutate(goodscore = (score > beta) * score) %>%
-        group_by(celltype) %>%
-        summarise(SCS = sum(goodscore)) %>%
-        ungroup %>%
-        mutate(CIC = - SCS / sum(SCS) * log(SCS / sum(SCS))) %>%
-        replace_na(list(CIC = 0)) %>%
-        summarise(IC = sum(CIC) / K,
-                  S = sum(SCS) / K)
-    gamma <- alpha * log(SIC$IC) + (1 - alpha) * log(SIC$S)
-    return(gamma)
+
+    scoreT <- scoreT %>%
+        mutate(goodscore = (score > beta) * score)
+    TotalGoodScore <- sum(scoreT$goodscore)
+
+    IC <- scoreT %>%
+      group_by(celltype) %>%
+      summarise(GS = sum(goodscore)) %>%
+      ungroup %>%
+      mutate(CIC = - GS / TotalGoodScore * log(GS / TotalGoodScore)) %>%
+      replace_na(list(CIC = 0)) %>%
+      summarise(IC = sum(CIC) / K) %>%
+      pull(IC)
+
+    S <- TotalGoodScore / K
+
+    return(tibble(IC=IC, S=S))
 }
 
