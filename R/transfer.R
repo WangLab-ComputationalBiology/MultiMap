@@ -147,7 +147,7 @@ ValidateParams_TransferData <- function(
 
 SetObj_SB <- function(anchorset,
                       refdata,
-                      reference = NULL,
+                      reference.total = NULL,
                       query = NULL,
                       weight.reduction = 'pcaproject',
                       l2.norm = FALSE,
@@ -173,6 +173,12 @@ SetObj_SB <- function(anchorset,
     # nn2 step2: for all anchors weight normalization #########################
     # step3 : transfer labels #################################################
     # this step need no integration operations ################################
+
+
+  print(dim(reference.total))
+  Idents(reference.total) <- reference.total$batch
+    reference <- subset(reference.total, idents = names(anchorset))
+    print(unique(reference$batch))
 
     combined.ob <- slot(object = anchorset, name = "object.list")[[1]]
     anchors <- slot(object = anchorset, name = "anchors")
@@ -285,12 +291,6 @@ SetObj_SB <- function(anchorset,
         slot = 'neighbors',
         new.data = list('cells1' = reference.cells, 'cells2' = query.cells))
 
-    combined.ob <- SetIntegrationData(
-        object = combined.ob,
-        integration.name = "integrated",
-        slot = 'label.transfer',
-        new.data = label.transfer)
-
     return(combined.ob)
 }
 
@@ -312,10 +312,14 @@ SetObj_MB <- function(anchorsetL,
                       prediction.assay = FALSE,
                       store.weights = TRUE
                       ){
+
+  print(dim(reference))
+  print(unique(reference$batch))
+
     combined.ob.L <- lapply(anchorsetL,
                             SetObj_SB,
                             refdata,
-                            reference,
+                            reference.total = reference,
                             query,
                             weight.reduction,
                             l2.norm,
