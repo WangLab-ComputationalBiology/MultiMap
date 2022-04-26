@@ -12,6 +12,7 @@ RoxygenNote: 7.1.2
 Imports: 
     dplyr,
     future,
+    Matrix (>= 1.2-14),
     RANN,
     Rcpp,
     RcppAnnoy (>= 0.0.18),
