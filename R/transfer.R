@@ -424,6 +424,55 @@ getAnchorScore_SB <- function(object, integration.name){
     return(anchors[, "score"])
 }
 
+FindIntegrationMatrix <- function(
+  object,
+  assay = NULL,
+  integration.name = 'integrated',
+  features.integrate = NULL,
+  verbose = TRUE
+) {
+  assay <- assay %||% DefaultAssay(object = object)
+  neighbors <- GetIntegrationData(object = object, integration.name = integration.name, slot = 'neighbors')
+  nn.cells1 <- neighbors$cells1
+  nn.cells2 <- neighbors$cells2
+  anchors <- GetIntegrationData(
+    object = object,
+    integration.name = integration.name,
+    slot = 'anchors'
+  )
+  if (verbose) {
+    message("Finding integration vectors")
+  }
+
+  features.integrate <- features.integrate %||% rownames(
+    x = GetAssayData(object = object, assay = assay, slot = "data")
+  )
+  browser()
+  data.use1 <- t(x = GetAssayData(
+    object = object,
+    assay = assay,
+    slot = "data")[features.integrate, nn.cells1]
+  )
+  browser()
+  data.use2 <- t(x = GetAssayData(
+    object = object,
+    assay = assay,
+    slot = "data")[features.integrate, nn.cells2]
+  )
+  anchors1 <- nn.cells1[anchors[, "cell1"]]
+  anchors2 <- nn.cells2[anchors[, "cell2"]]
+  data.use1 <- data.use1[anchors1, ]
+  data.use2 <- data.use2[anchors2, ]
+  integration.matrix <- data.use2 - data.use1
+  object <- SetIntegrationData(
+    object = object,
+    integration.name = integration.name,
+    slot = 'integration.matrix',
+    new.data = integration.matrix
+  )
+  return(object)
+}
+
 FindWeights_MB <- function(combined.ob.L,
                            reduction = NULL,
                            assay = NULL,
@@ -439,7 +488,6 @@ FindWeights_MB <- function(combined.ob.L,
                            verbose = TRUE) {
     # input: query cells, all anchors' distance list, all anchors' scoer list, etc ############################
     # step1: get distance  ####################################################
-  browser()
     object = combined.ob.L[[1]]
     if (verbose) {
         message("Finding integration vector weights")
@@ -448,19 +496,15 @@ FindWeights_MB <- function(combined.ob.L,
     if (is.null(x = reduction) & is.null(x = features)) {
         stop("Need to specify either dimension reduction object or a set of features")
     }
-  browser()
     message("end find features")
-  browser()
     assay <- assay %||% DefaultAssay(object = object)
-  browser()
     neighbors <- GetIntegrationData(object = object,
                                     integration.name = integration.name,
                                     slot = 'neighbors')
-  browser()
     nn.cells1 <- neighbors$cells1
     nn.cells2 <- neighbors$cells2
 
-    anchors.cells2 <- unique(x = nn.cells2[GetComAnchorsC2_MB(combined.ob.L)])
+    anchors.cells2 <- unique(x = nn.cells2[GetComAnchorsC2_MB(combined.ob.L, integration.name)])
     if (is.null(x = features)) {
         data.use <- Embeddings(reduction)[nn.cells2, dims]
     } else {
@@ -482,10 +526,15 @@ FindWeights_MB <- function(combined.ob.L,
     cell.index <- Indices(object = knn_2_2)
 
     # step 2 get integration matrix  ##########################################
-    combined.ob.L <- lapply(combined.ob.L, FindIntegrationMatrix, verbose)
+    browser()
+    combined.ob.L <- lapply(combined.ob.L, FindIntegrationMatrix,
+                            assay = "RNA", integration.name = 'integrated',
+                            features.integrate = NULL, verbose = TRUE)
 
+    browser()
     integration_matrix_rownames_MB <- getIntegrationRownames_MB(combined.ob.L)
     anchor_score_MB <- getAnchorScore_MB(combined.ob.L)
+    browser()
 
     weights <- FindWeightsC(
         # query cells #########################################################
