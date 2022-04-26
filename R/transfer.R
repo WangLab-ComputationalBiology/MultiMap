@@ -145,6 +145,7 @@ ValidateParams_TransferData <- function(
   }
 }
 
+# here apply pca on query data, move to
 SetObj_SB <- function(anchorset,
                       refdata,
                       reference.total = NULL,
@@ -175,10 +176,8 @@ SetObj_SB <- function(anchorset,
     # this step need no integration operations ################################
 
 
-  print(dim(reference.total))
-  Idents(reference.total) <- reference.total$batch
+    Idents(reference.total) <- reference.total$batch
     reference <- subset(reference.total, idents = names(anchorset))
-    print(unique(reference$batch))
 
     combined.ob <- slot(object = anchorset, name = "object.list")[[1]]
     anchors <- slot(object = anchorset, name = "anchors")
@@ -215,69 +214,6 @@ SetObj_SB <- function(anchorset,
         prediction.assay = prediction.assay,
         label.transfer = label.transfer)
 
-    if (!inherits(x = weight.reduction, what = "DimReduc") && weight.reduction == 'pca') {
-        if (verbose) {
-            message("Running PCA on query dataset")
-        }
-        features <- slot(object = anchorset, name = "anchor.features")
-        query.ob <- query
-        query.ob <- ScaleData(object = query.ob, features = features, verbose = FALSE)
-        query.ob <- RunPCA(object = query.ob, npcs = max(dims), features = features, verbose = FALSE)
-        query.pca <- Embeddings(query.ob[['pca']])
-        rownames(x = query.pca) <- paste0(rownames(x = query.pca), "_query")
-        # fill with 0s
-        # initialize ref.pca matrix ###########################################
-        ref.pca <- matrix(
-            data = 0,
-            nrow = length(x = reference.cells),
-            ncol = ncol(x = query.pca),
-            dimnames = list(reference.cells, colnames(x = query.pca)))
-
-        # clean memory ########################################################
-        rm(query.ob)
-
-        # combind pca and in the cell order of combined.ob ####################
-        # here ref.pca is 0 ###################################################
-        combined.pca.embeddings <- rbind(ref.pca, query.pca)[colnames(x = combined.ob), ]
-
-        combined.pca <- CreateDimReducObject(
-            embeddings = combined.pca.embeddings,
-            key = "PC_",
-            assay = DefaultAssay(object = combined.ob))
-
-        combined.ob[["pca"]] <- combined.pca
-        if (l2.norm) {
-            combined.ob <- L2Dim(object = combined.ob, reduction = 'pca')
-        }
-    }
-
-    if (!inherits(x = weight.reduction, what = "DimReduc") && weight.reduction == "lsi") {
-        if (!("lsi" %in% Reductions(object = query))) {
-            stop("Requested lsi for weight.reduction, but lsi not stored in query object.")
-        } else {
-            weight.reduction <- query[["lsi"]]
-        }
-    }
-
-    if (inherits(x = weight.reduction, what = "DimReduc")) {
-        weight.reduction <- RenameCells(
-            object = weight.reduction,
-            new.names = paste0(Cells(x = weight.reduction), "_query"))
-    } else {
-        if (l2.norm) {
-            weight.reduction.l2 <- paste0(weight.reduction, ".l2")
-            if (weight.reduction.l2 %in% Reductions(object = combined.ob)) {
-                combined.ob <- L2Dim(object = combined.ob, reduction = weight.reduction)
-            }
-            weight.reduction <- weight.reduction.l2
-        }
-        weight.reduction <- combined.ob[[weight.reduction]]
-    }
-
-    if (max(dims) > ncol(x = weight.reduction)) {
-        stop("dims is larger than the number of available dimensions in ",
-             "weight.reduction (", ncol(x = weight.reduction), ").", call. = FALSE)
-    }
 
     combined.ob <- SetIntegrationData(
         object = combined.ob,
@@ -313,9 +249,6 @@ SetObj_MB <- function(anchorsetL,
                       store.weights = TRUE
                       ){
 
-  print(dim(reference))
-  print(unique(reference$batch))
-
     combined.ob.L <- lapply(anchorsetL,
                             SetObj_SB,
                             refdata,
@@ -347,7 +280,6 @@ FindDistances_SB <- function(object,
                              nn.method = "annoy",
                              n.trees = 50,
                              eps = 0,
-                             reverse = FALSE,
                              verbose = TRUE){
   if (verbose) {
     message("Finding integration vector weights")
@@ -360,47 +292,21 @@ FindDistances_SB <- function(object,
   nn.cells1 <- neighbors$cells1
   nn.cells2 <- neighbors$cells2
 
+    message("get neighbors")
   anchors <- GetIntegrationData(
     object = object,
     integration.name = integration.name,
     slot = 'anchors'
   )
-  if (reverse) {
-    anchors.cells2 <- nn.cells2[anchors[, "cell2"]]
-    anchors.cells1 <- nn.cells1[anchors[, "cell1"]]
-    to.keep <- !duplicated(x = anchors.cells1)
-    anchors.cells1 <- anchors.cells1[to.keep]
-    anchors.cells2 <- anchors.cells2[to.keep]
-    if (is.null(x = features)) {
-      data.use <- Embeddings(object = reduction)[nn.cells1, dims]
-      data.use.query <- Embeddings(object = reduction)[nn.cells2, dims]
-    } else {
-      data.use <- t(x = GetAssayData(
-        object = object,
-        slot = 'data',
-        assay = assay)[features, nn.cells1]
-      )
-      data.use.query <- t(x = GetAssayData(
-        object = object,
-        slot = 'data',
-        assay = assay)[features, nn.cells2]
-      )
-    }
-    knn_2_2 <- NNHelper(
-      data = data.use[anchors.cells1, ],
-      query = data.use.query,
-      k = k,
-      method = nn.method,
-      n.trees = n.trees,
-      eps = eps
-    )
-  } else {
+    message("get anchors")
     anchors.cells2 <- unique(x = nn.cells2[anchors[, "cell2"]])
     if (is.null(x = features)) {
       data.use <- Embeddings(reduction)[nn.cells2, dims]
     } else {
       data.use <- t(x = GetAssayData(object = object, slot = 'data', assay = assay)[features, nn.cells2])
     }
+
+    message("begin NNhelper")
     knn_2_2 <- NNHelper(
       data = data.use[anchors.cells2, ],
       query = data.use,
@@ -409,7 +315,8 @@ FindDistances_SB <- function(object,
       n.trees = n.trees,
       eps = eps
     )
-  }
+    message("get NNhelper")
+
   distances <- Distances(object = knn_2_2)
   distances <- 1 - (distances / distances[, ncol(x = distances)])
   cell.index <- Indices(object = knn_2_2)
@@ -444,10 +351,9 @@ FindDistances_MB <- function(object.L,
                              nn.method = "annoy",
                              n.trees = 50,
                              eps = 0,
-                             reverse = FALSE,
                              verbose = TRUE
                              ){
-    combined.ob.L <- apply(object.L,
+    combined.ob.L <- lapply(object.L,
                            FindDistances_SB,
                            reduction,
                            assay,
@@ -459,7 +365,6 @@ FindDistances_MB <- function(object.L,
                            nn.method,
                            n.trees,
                            eps,
-                           reverse,
                            verbose)
     return(combined.ob.L)
 }
@@ -538,9 +443,12 @@ FindWeights_MB <- function(combined.ob.L,
     if (verbose) {
         message("Finding integration vector weights")
     }
+    message("find features")
     if (is.null(x = reduction) & is.null(x = features)) {
         stop("Need to specify either dimension reduction object or a set of features")
     }
+
+    message("end find features")
     assay <- assay %||% DefaultAssay(object = object)
     neighbors <- GetIntegrationData(object = object,
                                     integration.name = integration.name,
@@ -602,9 +510,14 @@ TransferData_MB <- function(# input anchor set list  #################
                             refdata,
                             reference = NULL,
                             query = NULL,
+                            features = NULL,
+                            assay = "RNA",
+                            integration.name = 'integrated',
                             weight.reduction = 'pcaproject',
                             l2.norm = FALSE,
                             dims = NULL,
+                            k = 300,
+                            nn.method = "annoy",
                             k.weight = 50,
                             sd.weight = 1,
                             eps = 0,
@@ -615,23 +528,9 @@ TransferData_MB <- function(# input anchor set list  #################
                             store.weights = TRUE
                             ) {
 
-    # step1 : filter out good batches #########################################
-    # Get batch score/weight  #################################################
-    # outside test ############################################################
 
-    # step2 : generate weights ################################################
-    # pre-process #############################################################
-    # pp step 1: parameter validation #########################################
-    # pp step 2: data format correction #######################################
-
-    # this step need to nn2 steps #############################################
-    # nn2 step1: for each batch find neighbors for normalization ##############
-    # nn2 step2: for all anchors weight normalization #########################
-
-    # step3 : transfer labels #################################################
-    # this step need no integration operations ################################
-
-    # step1 ###################################################################
+    # step1  parameter validation ###################################################################
+    message("step1")
     combined.ob.L <- SetObj_MB(anchorsetL,
                                refdata,
                                reference,
@@ -649,29 +548,70 @@ TransferData_MB <- function(# input anchor set list  #################
                                store.weights)
 
     # step2 ###################################################################
+    # step2.1 apply pca on query data, then pass it as parameter to
+    if (!inherits(x = weight.reduction, what = "DimReduc") && weight.reduction == 'pca') {
+        if (verbose) {
+            message("Running PCA on query dataset")
+        }
+        features <- slot(object = anchorset, name = "anchor.features")
+        query.ob <- query
+        query.ob <- ScaleData(object = query.ob, features = features, verbose = FALSE)
+        query.ob <- RunPCA(object = query.ob, npcs = max(dims), features = features, verbose = FALSE)
+        rm(query.ob)
+    }
 
+    if (!inherits(x = weight.reduction, what = "DimReduc") && weight.reduction == "lsi") {
+        if (!("lsi" %in% Reductions(object = query))) {
+            stop("Requested lsi for weight.reduction, but lsi not stored in query object.")
+        } else {
+            weight.reduction <- query[["lsi"]]
+        }
+    }
+
+    if (inherits(x = weight.reduction, what = "DimReduc")) {
+        weight.reduction <- RenameCells(
+            object = weight.reduction,
+            new.names = paste0(Cells(x = weight.reduction), "_query"))
+    } else {
+        if (l2.norm) {
+            weight.reduction.l2 <- paste0(weight.reduction, ".l2")
+            if (weight.reduction.l2 %in% Reductions(object = combined.ob)) {
+                combined.ob <- L2Dim(object = combined.ob, reduction = weight.reduction)
+            }
+            weight.reduction <- weight.reduction.l2
+        }
+        weight.reduction <- combined.ob[[weight.reduction]]
+    }
+
+    if (max(dims) > ncol(x = weight.reduction)) {
+        stop("dims is larger than the number of available dimensions in ",
+             "weight.reduction (", ncol(x = weight.reduction), ").", call. = FALSE)
+    }
+
+    # step 2: get distance
+    message("step2")
     combined.ob.L <- FindDistances_MB(combined.ob.L,
-                                      reduction,
-                                      assay,
-                                      integration.name,
+                                      reduction = weight.reduction,
+                                      assay = assay,
+                                      integration.name = 'integrated',
                                       dims,
-                                      features,
+                                      features = features,
                                       k,
                                       sd.weight,
                                       nn.method,
                                       n.trees,
                                       eps,
-                                      reverse,
                                       verbose)
-
-    # step3 ###################################################################
-
+#
+    # # step3 ###################################################################
+#
+    message("step3")
     weights <- FindWeights_MB(combined.ob.L,
                                     reduction,
                                     assay,
                                     integration.name,
                                     dims,
-                                    features,
+                                    features = features,
                                     k,
                                     sd.weight,
                                     nn.method,
@@ -679,21 +619,21 @@ TransferData_MB <- function(# input anchor set list  #################
                                     eps,
                                     reverse,
                                     verbose)
-
-    # step4 ###################################################################
-    query <- Predicts_MB(combined.ob.L,
-                         reduction,
-                         assay,
-                         integration.name,
-                         dims,
-                         features,
-                         k,
-                         sd.weight,
-                         nn.method,
-                         n.trees,
-                         eps,
-                         reverse,
-                         verbose)
-
-    return(query)
+#
+    # # step4 ###################################################################
+    # query <- Predicts_MB(combined.ob.L,
+    #                      reduction,
+    #                      assay,
+    #                      integration.name,
+    #                      dims,
+    #                      features,
+    #                      k,
+    #                      sd.weight,
+    #                      nn.method,
+    #                      n.trees,
+    #                      eps,
+    #                      reverse,
+    #                      verbose)
+#
+    return(weight)
 }
