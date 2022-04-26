@@ -472,6 +472,8 @@ FindIntegrationMatrix <- function(
 }
 
 FindWeights_MB <- function(combined.ob.L,
+                           query,
+                           refdata,
                            reduction = NULL,
                            assay = NULL,
                            integration.name = 'integrated',
@@ -550,8 +552,63 @@ FindWeights_MB <- function(combined.ob.L,
         sd = sd.weight,
         display_progress = verbose)
 
-    return(weights)
+    rownames(weights) <- integration_matrix_rownames_MB
+    colnames(weights) <- nn.cells2
+
+    # prediction: step1  get nn.cell1 which <=> nn.cells2
+    nn.anchors <- GetComAnchors_MB(combined.ob.L, integration.name)
+
+    query.cells <- unname(obj = sapply(
+      X = nn.cells2,
+      FUN = function(x) gsub(pattern = "_query", replacement = "", x = x)
+    ))
+
+    # step2: get annotation of nn.cell1 from refdata
+    nn.anchors$id1 <- refdata[[1]][nn.anchors[,"cell1"]]
+
+    # step3: generate prediction matrix
+    reference.ids <- factor(x = nn.anchors$id1, levels = unique(x = refdata[[1]]))
+    possible.ids <- levels(x = reference.ids)
+
+    prediction.mat <- matrix(nrow = nrow(x = nn.anchors), ncol = length(x = possible.ids), data = 0)
+    for(i in 1:length(x = possible.ids)){
+      prediction.mat[which(reference.ids == possible.ids[i]), i] = 1
+    }
+
+    if(verbose){
+      message("Predicting cell labels")
+    }
+
+
+    # step4: get prediction.scores
+
+    browser()
+    prediction.scores <- Matrix::t(x = weights) %*% prediction.mat
+
+    # step5: generate metadata
+
+    colnames(x = prediction.scores) <- possible.ids
+    rownames(x = prediction.scores) <- query.cells
+    prediction.ids <- possible.ids[apply(X = prediction.scores, MARGIN = 1, FUN = which.max)]
+    prediction.ids <- as.character(prediction.ids)
+    prediction.max <- apply(X = prediction.scores, MARGIN = 1, FUN = max)
+    if (is.null(x = query)){
+      prediction.scores <- cbind(prediction.scores, max = prediction.max)
+    }
+    predictions <- data.frame(
+      predicted.id = prediction.ids,
+      prediction.score = as.matrix(prediction.scores),
+      row.names = query.cells,
+      stringsAsFactors = FALSE
+    )
+
+    query <- AddMetaData(object = query, metadata = prediction.max, col.name = paste0("predicted.score"))
+    query <- AddMetaData(object = query, metadata = prediction.ids, col.name = paste0("predicted"))
+
+    return(query)
 }
+
+
 
 TransferData_MB <- function(# input anchor set list  #################
                             anchorsetL,
@@ -594,6 +651,79 @@ TransferData_MB <- function(# input anchor set list  #################
                                prediction.assay,
                                store.weights)
 
+
+  if (!inherits(x = refdata, what = "list")) {
+    refdata <- list(id = refdata)
+  }
+  for (i in 1:length(x = refdata)) {
+    if (inherits(x = refdata[[i]], what = c("character", "factor"))) {
+      # check is it's in the reference object
+      if (length(x = refdata[[i]]) == 1) {
+        if (is.null(x = reference)) {
+          warning("If providing a single string to refdata element number ", i,
+                  ", please provide the reference object. Skipping element ", i,
+                  ".", call. = FALSE, immediate. = TRUE)
+          refdata[[i]] <- FALSE
+          next
+        }
+        if (refdata[[i]] %in% Assays(object = reference)) {
+          refdata[[i]] <- GetAssayData(object = reference, assay = refdata[[i]])
+          colnames(x = refdata[[i]]) <- paste0(colnames(x = refdata[[i]]), "_reference")
+          next
+        } else if (refdata[[i]] %in% colnames(x = reference[[]])) {
+          refdata[[i]] <- reference[[refdata[[i]]]][, 1]
+        } else {
+          warning("Element number ", i, " provided to refdata does not exist in ",
+                  "the provided reference object.", call. = FALSE, immediate. = TRUE)
+          refdata[[i]] <- FALSE
+          next
+        }
+      } else if (length(x = refdata[[i]]) != length(x = reference.cells)) {
+        warning("Please provide a vector that is the same length as the number ",
+                "of reference cells used in anchor finding.\n",
+                "Length of vector provided: ", length(x = refdata[[i]]), "\n",
+                "Length of vector required: ", length(x = reference.cells),
+                "\nSkipping element ", i, ".", call. = FALSE, immediate. = TRUE)
+        refdata[[i]] <- FALSE
+      }
+    } else if (inherits(x = refdata[[i]], what = c("dgCMatrix", "matrix"))) {
+      if (ncol(x = refdata[[i]]) != length(x = reference.cells)) {
+        warning("Please provide a matrix that has the same number of columns as ",
+                "the number of reference cells used in anchor finding.\n",
+                "Number of columns in provided matrix : ", ncol(x = refdata[[i]]), "\n",
+                "Number of columns required           : ", length(x = reference.cells),
+                "\nSkipping element ", i, ".", call. = FALSE, immediate. = TRUE)
+        refdata[[i]] <- FALSE
+      } else {
+        colnames(x = refdata[[i]]) <- paste0(colnames(x = refdata[[i]]), "_reference")
+        if (any(!colnames(x = refdata[[i]]) == reference.cells)) {
+          if (any(!colnames(x = refdata[[i]]) %in% reference.cells) || any(!reference.cells %in% colnames(x = refdata[[i]]))) {
+            warning("Some (or all) of the column names of the provided refdata ",
+                    "don't match the reference cells used in anchor finding ",
+                    "\nSkipping element", i, ".", call. = FALSE, immediate. = TRUE)
+            refdata[[i]] <- FALSE
+          } else {
+            refdata[[i]] <- refdata[[i]][, reference.cells]
+          }
+        }
+      }
+      if (!slot %in% c("counts", "data")) {
+        stop("Please specify slot as either 'counts' or 'data'.")
+      }
+    } else {
+      warning("Please provide either a vector (character or factor) for label ",
+              "transfer or a matrix for feature transfer. \nType provided: ",
+              class(x = refdata[[i]]))
+      refdata[[i]] <- FALSE
+    }
+    if (names(x = refdata)[i] == "") {
+      possible.names <- make.unique(names = c(names(x = refdata), paste0("e", i)))
+      names(x = refdata)[i] <- possible.names[length(x = possible.names)]
+      if (verbose) {
+        message("refdata element ", i, " is not named. Setting name as ", names(x = refdata)[i])
+      }
+    }
+  }
     # step2 ###################################################################
     # step2.1 apply pca on query data, then pass it as parameter to
     if (!inherits(x = weight.reduction, what = "DimReduc") && weight.reduction == 'pca') {
@@ -622,12 +752,12 @@ TransferData_MB <- function(# input anchor set list  #################
     } else {
         if (l2.norm) {
             weight.reduction.l2 <- paste0(weight.reduction, ".l2")
-            if (weight.reduction.l2 %in% Reductions(object = combined.ob)) {
-                combined.ob <- L2Dim(object = combined.ob, reduction = weight.reduction)
+            if (weight.reduction.l2 %in% Reductions(object = combined.ob.L[[1]])) {
+                combined.ob.L[[1]] <- L2Dim(object = combined.ob.L[[1]], reduction = weight.reduction)
             }
             weight.reduction <- weight.reduction.l2
         }
-        weight.reduction <- combined.ob[[weight.reduction]]
+        weight.reduction <- combined.ob.L[[1]][[weight.reduction]]
     }
 
     if (max(dims) > ncol(x = weight.reduction)) {
@@ -653,7 +783,9 @@ TransferData_MB <- function(# input anchor set list  #################
     # # step3 ###################################################################
 #
     message("step3")
-    weights <- FindWeights_MB(combined.ob.L,
+    query <- FindWeights_MB(combined.ob.L,
+                            query = query,
+                              refdata = refdata,
                                     reduction = weight.reduction,
                                     assay = assay,
                                     integration.name = integration.name,
@@ -666,22 +798,6 @@ TransferData_MB <- function(# input anchor set list  #################
                                     eps = eps,
                                     verbose = verbose)
 #
-    # # step4 ###################################################################
-    message("step 4")
-    browser()
-    # query <- Predicts_MB(combined.ob.L,
-    #                      reduction,
-    #                      assay,
-    #                      integration.name,
-    #                      dims,
-    #                      features,
-    #                      k,
-    #                      sd.weight,
-    #                      nn.method,
-    #                      n.trees,
-    #                      eps,
-    #                      reverse,
-    #                      verbose)
 #
-    return(weight)
+    return(query)
 }
