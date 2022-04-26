@@ -439,6 +439,7 @@ FindWeights_MB <- function(combined.ob.L,
                            verbose = TRUE) {
     # input: query cells, all anchors' distance list, all anchors' scoer list, etc ############################
     # step1: get distance  ####################################################
+  browser()
     object = combined.ob.L[[1]]
     if (verbose) {
         message("Finding integration vector weights")
@@ -447,13 +448,15 @@ FindWeights_MB <- function(combined.ob.L,
     if (is.null(x = reduction) & is.null(x = features)) {
         stop("Need to specify either dimension reduction object or a set of features")
     }
-
+  browser()
     message("end find features")
+  browser()
     assay <- assay %||% DefaultAssay(object = object)
+  browser()
     neighbors <- GetIntegrationData(object = object,
                                     integration.name = integration.name,
                                     slot = 'neighbors')
-
+  browser()
     nn.cells1 <- neighbors$cells1
     nn.cells2 <- neighbors$cells2
 
@@ -515,8 +518,7 @@ TransferData_MB <- function(# input anchor set list  #################
                             integration.name = 'integrated',
                             weight.reduction = 'pcaproject',
                             l2.norm = FALSE,
-                            dims = NULL,
-                            k = 300,
+                            dims = 1:10,
                             nn.method = "annoy",
                             k.weight = 50,
                             sd.weight = 1,
@@ -589,36 +591,35 @@ TransferData_MB <- function(# input anchor set list  #################
     }
 
     # step 2: get distance
-    message("step2")
-    combined.ob.L <- FindDistances_MB(combined.ob.L,
-                                      reduction = weight.reduction,
-                                      assay = assay,
-                                      integration.name = 'integrated',
-                                      dims,
-                                      features = features,
-                                      k,
-                                      sd.weight,
-                                      nn.method,
-                                      n.trees,
-                                      eps,
-                                      verbose)
+    # message("step2")
+    # combined.ob.L <- FindDistances_MB(combined.ob.L,
+    #                                   reduction = weight.reduction,
+    #                                   assay = assay,
+    #                                   integration.name = 'integrated',
+    #                                   dims,
+    #                                   features = features,
+    #                                   k = k.weight,
+    #                                   sd.weight,
+    #                                   nn.method,
+    #                                   n.trees,
+    #                                   eps,
+    #                                   verbose)
 #
     # # step3 ###################################################################
 #
     message("step3")
     weights <- FindWeights_MB(combined.ob.L,
-                                    reduction,
-                                    assay,
-                                    integration.name,
-                                    dims,
+                                    reduction = weight.reduction,
+                                    assay = assay,
+                                    integration.name = integration.name,
+                                    dims = dims,
                                     features = features,
-                                    k,
-                                    sd.weight,
-                                    nn.method,
-                                    n.trees,
-                                    eps,
-                                    reverse,
-                                    verbose)
+                                    k = k.weight,
+                                    sd.weight = sd.weight,
+                                    nn.method = nn.method,
+                                    n.trees = n.trees,
+                                    eps = eps,
+                                    verbose = verbose)
 #
     # # step4 ###################################################################
     # query <- Predicts_MB(combined.ob.L,
