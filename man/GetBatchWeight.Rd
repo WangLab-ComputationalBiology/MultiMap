@@ -4,7 +4,7 @@
 \alias{GetBatchWeight}
 \title{Get gamma for a batch}
 \usage{
-GetBatchWeight(anchorset, celltype, beta, alpha)
+GetBatchWeight(anchorset, celltype, beta)
 }
 \arguments{
 \item{anchorset}{an \code{AnchorSet} object}

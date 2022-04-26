@@ -2,3 +2,11 @@
 
 export(FindTransferAnchors_MB)
 export(GetRefBatchWeight_MB)
+importClassesFrom(SeuratObject,Neighbor)
+importFrom(RcppAnnoy,AnnoyAngular)
+importFrom(RcppAnnoy,AnnoyEuclidean)
+importFrom(RcppAnnoy,AnnoyHamming)
+importFrom(RcppAnnoy,AnnoyManhattan)
+importFrom(future,plan)
+importFrom(future.apply,future_lapply)
+importFrom(methods,new)
