@@ -447,18 +447,16 @@ FindIntegrationMatrix <- function(
   features.integrate <- features.integrate %||% rownames(
     x = GetAssayData(object = object, assay = assay, slot = "data")
   )
-  browser()
-  data.use1 <- t(x = GetAssayData(
+  data.use1 <- t(x = as.matrix(GetAssayData(
     object = object,
     assay = assay,
     slot = "data")[features.integrate, nn.cells1]
-  )
-  browser()
-  data.use2 <- t(x = GetAssayData(
+  ))
+  data.use2 <- t(x = as.matrix(GetAssayData(
     object = object,
     assay = assay,
     slot = "data")[features.integrate, nn.cells2]
-  )
+  ))
   anchors1 <- nn.cells1[anchors[, "cell1"]]
   anchors2 <- nn.cells2[anchors[, "cell2"]]
   data.use1 <- data.use1[anchors1, ]
@@ -505,6 +503,7 @@ FindWeights_MB <- function(combined.ob.L,
     nn.cells2 <- neighbors$cells2
 
     anchors.cells2 <- unique(x = nn.cells2[GetComAnchorsC2_MB(combined.ob.L, integration.name)])
+
     if (is.null(x = features)) {
         data.use <- Embeddings(reduction)[nn.cells2, dims]
     } else {
@@ -526,15 +525,12 @@ FindWeights_MB <- function(combined.ob.L,
     cell.index <- Indices(object = knn_2_2)
 
     # step 2 get integration matrix  ##########################################
-    browser()
     combined.ob.L <- lapply(combined.ob.L, FindIntegrationMatrix,
                             assay = "RNA", integration.name = 'integrated',
                             features.integrate = NULL, verbose = TRUE)
 
-    browser()
-    integration_matrix_rownames_MB <- getIntegrationRownames_MB(combined.ob.L)
-    anchor_score_MB <- getAnchorScore_MB(combined.ob.L)
-    browser()
+    integration_matrix_rownames_MB <- getIntegrationRownames_MB(combined.ob.L, integration.name = integration.name)
+    anchor_score_MB <- getAnchorScore_MB(combined.ob.L, integration.name = integration.name)
 
     weights <- FindWeightsC(
         # query cells #########################################################
@@ -671,6 +667,8 @@ TransferData_MB <- function(# input anchor set list  #################
                                     verbose = verbose)
 #
     # # step4 ###################################################################
+    message("step 4")
+    browser()
     # query <- Predicts_MB(combined.ob.L,
     #                      reduction,
     #                      assay,
