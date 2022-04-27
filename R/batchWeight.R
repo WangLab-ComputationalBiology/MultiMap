@@ -72,7 +72,6 @@
 #' @return Returns an \code{AnchorSet} object list.
 #'
 #' @export
-#' @examples
 FindTransferAnchors_MB <- function(reference,
                                    query,
                                    batch = "batch",
@@ -148,10 +147,9 @@ FindTransferAnchors_MB <- function(reference,
 #' @param beta beta parameter
 #' @param alpha alpha parameter
 #'
-#' @return gamma score list
+#' @return gamma score table
 #' @export
 #'
-#' @examples
 GetRefBatchWeight_MB <- function(anchorsetL,
                               celltype,
                               beta = 0.5,
@@ -179,7 +177,6 @@ GetRefBatchWeight_MB <- function(anchorsetL,
 #'
 #' @return gamma score
 #'
-#' @examples
 GetBatchWeight <- function(anchorset, celltype, beta){
     scoreT <- as.tibble(anchorset@anchors)
     K <- length(unique(x = celltype))
