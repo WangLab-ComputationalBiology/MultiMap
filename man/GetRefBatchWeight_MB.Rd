@@ -16,7 +16,7 @@ GetRefBatchWeight_MB(anchorsetL, celltype, beta = 0.5, alpha = 0.5)
 \item{alpha}{alpha parameter}
 }
 \value{
-gamma score list
+gamma score table
 }
 \description{
 Get reference quality score gamma for each batch
