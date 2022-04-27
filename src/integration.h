@@ -8,7 +8,7 @@ using namespace Rcpp;
 
 // [[Rcpp::depends(RcppEigen)]]
 //----------------------------------------------------
-Eigen::sparsematrix<double> findweightsc(
+Eigen::sparsematrix<double> FindWeightsC(
   NumericVector cells2,
   Eigen::MatrixXd distances,
   std::vector<std::string> anchor_cells2,
