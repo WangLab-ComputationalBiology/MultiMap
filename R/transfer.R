@@ -1,3 +1,4 @@
+#' @useDynLib MultiMap
 #'
 NULL
 
@@ -557,7 +558,6 @@ FindWeights_MB <- function(combined.ob.L,
     rownames(weights) <- integration_matrix_rownames_MB
     colnames(weights) <- nn.cells2
 
-    # prediction: step1  get nn.cell1 which <=> nn.cells2
     nn.anchors <- GetComAnchors_MB(combined.ob.L, integration.name)
 
     query.cells <- unname(obj = sapply(
@@ -581,14 +581,10 @@ FindWeights_MB <- function(combined.ob.L,
       message("Predicting cell labels")
     }
 
-
     # step4: get prediction.scores
-
-    browser()
     prediction.scores <- Matrix::t(x = weights) %*% prediction.mat
 
     # step5: generate metadata
-
     colnames(x = prediction.scores) <- possible.ids
     rownames(x = prediction.scores) <- query.cells
     prediction.ids <- possible.ids[apply(X = prediction.scores, MARGIN = 1, FUN = which.max)]

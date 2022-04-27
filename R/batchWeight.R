@@ -1,3 +1,7 @@
+#' @useDynLib MultiMap
+#'
+NULL
+
 #' Find transfer anchors list
 #'
 #' Find a set of anchors between each reference batch and query object. These
