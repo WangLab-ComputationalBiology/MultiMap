@@ -292,30 +292,30 @@ FindDistances_SB <- function(object,
   nn.cells1 <- neighbors$cells1
   nn.cells2 <- neighbors$cells2
 
-    message("get neighbors")
+  message("get neighbors")
   anchors <- GetIntegrationData(
     object = object,
     integration.name = integration.name,
     slot = 'anchors'
   )
-    message("get anchors")
-    anchors.cells2 <- unique(x = nn.cells2[anchors[, "cell2"]])
-    if (is.null(x = features)) {
-      data.use <- Embeddings(reduction)[nn.cells2, dims]
-    } else {
-      data.use <- t(x = GetAssayData(object = object, slot = 'data', assay = assay)[features, nn.cells2])
-    }
+  message("get anchors")
+  anchors.cells2 <- unique(x = nn.cells2[anchors[, "cell2"]])
+  if (is.null(x = features)) {
+    data.use <- Embeddings(reduction)[nn.cells2, dims]
+  } else {
+    data.use <- t(x = GetAssayData(object = object, slot = 'data', assay = assay)[features, nn.cells2])
+  }
 
-    message("begin NNhelper")
-    knn_2_2 <- NNHelper(
-      data = data.use[anchors.cells2, ],
-      query = data.use,
-      k = k,
-      method = nn.method,
-      n.trees = n.trees,
-      eps = eps
-    )
-    message("get NNhelper")
+  message("begin NNhelper")
+  knn_2_2 <- NNHelper(
+    data = data.use[anchors.cells2, ],
+    query = data.use,
+    k = k,
+    method = nn.method,
+    n.trees = n.trees,
+    eps = eps
+  )
+  message("get NNhelper")
 
   distances <- Distances(object = knn_2_2)
   distances <- 1 - (distances / distances[, ncol(x = distances)])
